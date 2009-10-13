@@ -33,7 +33,7 @@ VOID WINAPI SvcMain( DWORD, LPTSTR * );
 VOID ReportSvcStatus( DWORD, DWORD, DWORD );
 VOID SvcInit( DWORD, LPTSTR * ); 
 VOID SvcReportEvent( LPTSTR );
-
+BOOLEAN SendReportsToDevice( LPTSTR devPath );
 
 //
 // Purpose: 
@@ -276,12 +276,55 @@ VOID SvcInit( DWORD dwArgc, LPTSTR *lpszArgv)
 		return;
 	}
 
+	HDEVINFO hDevInfo = SetupDiGetClassDevs( &hidGuid, 0, 0, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE );
+
+	if ( hDevInfo == INVALID_HANDLE_VALUE )
+	{
+		SvcReportEvent(TEXT("Unable to retrive the device information set"));
+		ReportSvcStatus( SERVICE_STOPPED, NO_ERROR, 0 );
+		return;
+	}
+
+	SP_DEVICE_INTERFACE_DATA DeviceInterfaceData;
+	DeviceInterfaceData.cbSize = sizeof(SP_DEVICE_INTERFACE_DATA);
+
+	for (DWORD dMemberIndex = 0; SetupDiEnumDeviceInterfaces( hDevInfo, NULL, &hidGuid, dMemberIndex, &DeviceInterfaceData); dMemberIndex++ )
+	{
+		DWORD RequiredSize;
+
+		if ( SetupDiGetDeviceInterfaceDetail( hDevInfo, &DeviceInterfaceData, NULL, 0, &RequiredSize, 0) || GetLastError() != ERROR_INSUFFICIENT_BUFFER )
+		{
+			SvcReportEvent(TEXT("SetupDiGetDeviceInterfaceDetail succeeded when it was supposed to fail or it failed in an unexpected manner"));
+			ReportSvcStatus( SERVICE_STOPPED, NO_ERROR, 0 );
+			return;
+		}
+
+		PSP_DEVICE_INTERFACE_DETAIL_DATA pDeviceInterfaceDetailData = (PSP_DEVICE_INTERFACE_DETAIL_DATA)HeapAlloc( GetProcessHeap(), 0, RequiredSize);
+
+		if ( pDeviceInterfaceDetailData == NULL )
+		{
+			SvcReportEvent(TEXT("Unable to allocate heap memory"));
+			ReportSvcStatus( SERVICE_STOPPED, NO_ERROR, 0 );
+			return;
+		}
+
+		pDeviceInterfaceDetailData->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA);
+
+		if ( !SetupDiGetDeviceInterfaceDetail( hDevInfo, &DeviceInterfaceData, pDeviceInterfaceDetailData, RequiredSize, NULL, 0) )
+		{
+			SvcReportEvent(TEXT("SetupDiGetDeviceInterfaceDetail failed"));
+			HeapFree(GetProcessHeap(), 0, pDeviceInterfaceDetailData);
+			ReportSvcStatus( SERVICE_STOPPED, NO_ERROR, 0 );
+			return;
+		}
+
+		SendReportsToDevice(pDeviceInterfaceDetailData->DevicePath);
+
+		HeapFree(GetProcessHeap(), 0, pDeviceInterfaceDetailData);
+	}
+
 	// Report running status when initialization is complete.
-
 	ReportSvcStatus( SERVICE_RUNNING, NO_ERROR, 0 );
-
-	// TO_DO: Perform work until service stops.
-
 
 	while(1)
 	{
@@ -349,17 +392,11 @@ DWORD WINAPI SvcCtrlHandler(
 							__in  LPVOID lpEventData,
 							__in  LPVOID lpContext )
 {
-	// Handle the requested control code. 
-
 	switch(dwControl) 
-	{  
-	case SERVICE_CONTROL_STOP: 
+	{
+	case SERVICE_CONTROL_STOP:
 		ReportSvcStatus(SERVICE_STOP_PENDING, NO_ERROR, 0);
-
-		// Signal the service to stop.
-
 		SetEvent(ghSvcStopEvent);
-
 		return NO_ERROR;
 
 	case SERVICE_CONTROL_INTERROGATE: 
@@ -380,31 +417,37 @@ DWORD WINAPI SvcCtrlHandler(
 				lstrcat(buf, pDevBroadcastDevInterface->dbcc_name);
 				SvcReportEvent(buf);
 				
-				HANDLE hHidDevice = CreateFile(pDevBroadcastDevInterface->dbcc_name, 0, 
-					FILE_SHARE_READ | FILE_SHARE_WRITE, 0, OPEN_EXISTING, 0, 0 );
-
-				if ( hHidDevice == INVALID_HANDLE_VALUE )
-					return NO_ERROR;
-
-				HIDD_ATTRIBUTES HidAttributes;
-				HidAttributes.Size = sizeof(HIDD_ATTRIBUTES);
-				
-				if ( !HidD_GetAttributes( hHidDevice, &HidAttributes) )
-				{
-					CloseHandle( hHidDevice );
-					return NO_ERROR;
-				}
-
-				if ( IsBTHidDevice(HidAttributes.VendorID, HidAttributes.ProductID) )
-					TryToSwitchHid2Hci( hHidDevice );
-
-				CloseHandle( hHidDevice );
+				SendReportsToDevice(pDevBroadcastDevInterface->dbcc_name);
 			}
 		}
 		return NO_ERROR;
 	} 
 
 	return ERROR_CALL_NOT_IMPLEMENTED;
+}
+
+BOOLEAN SendReportsToDevice( LPTSTR devPath )
+{
+	HANDLE hHidDevice = CreateFile(devPath, 0, 
+		FILE_SHARE_READ | FILE_SHARE_WRITE, 0, OPEN_EXISTING, 0, 0 );
+
+	if ( hHidDevice == INVALID_HANDLE_VALUE )
+		return FALSE;
+
+	HIDD_ATTRIBUTES HidAttributes;
+	HidAttributes.Size = sizeof(HIDD_ATTRIBUTES);
+
+	if ( !HidD_GetAttributes( hHidDevice, &HidAttributes) )
+	{
+		CloseHandle( hHidDevice );
+		return FALSE;
+	}
+
+	if ( IsBTHidDevice(HidAttributes.VendorID, HidAttributes.ProductID) )
+		TryToSwitchHid2Hci( hHidDevice );
+
+	CloseHandle( hHidDevice );
+	return TRUE;
 }
 
 //

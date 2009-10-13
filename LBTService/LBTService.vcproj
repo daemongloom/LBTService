@@ -208,10 +208,6 @@
 				RelativePath=".\lhid2hci.cpp"
 				>
 			</File>
-			<File
-				RelativePath=".\lhid2hci_old.cpp"
-				>
-			</File>
 		</Filter>
 		<Filter
 			Name="Header Files"
