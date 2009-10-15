@@ -9,17 +9,17 @@ extern "C"
 }
 #include "lhid2hci.h"
 
-CHAR Reports[3][6] =
+CHAR Reports[3][7] =
 {
-	{ 0xFF, 0x80, 0x80, 0x01, 0x00, 0x00 },
-	{ 0xFF, 0x80, 0x00, 0x00, 0x30, 0x00 },
-	{ 0xFF, 0x81, 0x80, 0x00, 0x00, 0x00 }
+	{ (CHAR)0x10, (CHAR)0xFF, (CHAR)0x80, (CHAR)0x80, (CHAR)0x01, (CHAR)0x00, (CHAR)0x00 },
+	{ (CHAR)0x10, (CHAR)0xFF, (CHAR)0x80, (CHAR)0x00, (CHAR)0x00, (CHAR)0x30, (CHAR)0x00 },
+	{ (CHAR)0x10, (CHAR)0xFF, (CHAR)0x81, (CHAR)0x80, (CHAR)0x00, (CHAR)0x00, (CHAR)0x00 }
 };
 
 BOOLEAN IsBTHidDevice(
 					  __in USHORT pVendorId,
 					  __in USHORT pProductId
-	)
+					  )
 {
 	if ( pVendorId == 0x046d && pProductId == 0xc71f )
 		return TRUE;
@@ -27,13 +27,13 @@ BOOLEAN IsBTHidDevice(
 		return FALSE;
 }
 
-BOOLEAN TryToSwitchHid2Hci( __in HANDLE hHidDevice )
+BOOLEAN SwitchLogitech( __in HANDLE hHidDevice )
 {
 	PHIDP_PREPARSED_DATA PreparsedData;
 
 	if ( !HidD_GetPreparsedData( hHidDevice, &PreparsedData ) )
 		return FALSE;
-	
+
 	HIDP_CAPS       HidCaps;
 
 	if ( !HidP_GetCaps( PreparsedData, &HidCaps ) )
@@ -48,7 +48,7 @@ BOOLEAN TryToSwitchHid2Hci( __in HANDLE hHidDevice )
 		return FALSE;
 	}
 
-	if ( HidCaps.OutputReportByteLength != 7 )
+	if ( HidCaps.OutputReportByteLength != sizeof(Reports[0]) )
 	{
 		HidD_FreePreparsedData(PreparsedData);
 		return FALSE;
@@ -62,20 +62,17 @@ BOOLEAN TryToSwitchHid2Hci( __in HANDLE hHidDevice )
 		return FALSE;
 	}
 
-	for (int i = 0; i < 3; i++ )
+	for (int i = 0; i < sizeof(Reports) / sizeof(Reports[0]); i++ )
 	{
-		HidReport[0] = 0x10;
-		RtlCopyMemory( HidReport + 1, Reports[i], 6);
-
-		if (!HidD_SetOutputReport( hHidDevice, HidReport, HidCaps.OutputReportByteLength ))
+		CHAR ReportBuffer[sizeof(Reports[0])];
+		RtlCopyMemory( ReportBuffer, Reports[i], sizeof( Reports[0] ) );
+		if (!HidD_SetOutputReport( hHidDevice, ReportBuffer, HidCaps.OutputReportByteLength ) )
 		{
-			HeapFree( GetProcessHeap(), 0, HidReport );
 			HidD_FreePreparsedData(PreparsedData);
 			return FALSE;
 		}
 	}
 
-	HeapFree( GetProcessHeap(), 0, HidReport );
 	HidD_FreePreparsedData(PreparsedData);
 	return TRUE;
 }

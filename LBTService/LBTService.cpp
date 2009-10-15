@@ -12,7 +12,9 @@ extern "C"
 }
 #include <SetupAPI.h>
 #include "lhid2hci.h"
+#include "LBTService.h"
 #include "LBTServiceMsg.h"
+#include "resource.h"
 
 
 #pragma comment(lib, "advapi32.lib")
@@ -24,16 +26,6 @@ extern "C"
 SERVICE_STATUS          gSvcStatus; 
 SERVICE_STATUS_HANDLE   gSvcStatusHandle; 
 HANDLE                  ghSvcStopEvent = NULL;
-
-VOID SvcInstall(void);
-VOID SvcUninstall(void);
-DWORD WINAPI SvcCtrlHandler( __in DWORD dwControl, __in DWORD dwEventType, __in  LPVOID lpEventData, __in  LPVOID lpContext );
-VOID WINAPI SvcMain( DWORD, LPTSTR * ); 
-
-VOID ReportSvcStatus( DWORD, DWORD, DWORD );
-VOID SvcInit( DWORD, LPTSTR * ); 
-VOID SvcReportEvent( LPTSTR );
-BOOLEAN SendReportsToDevice( LPTSTR devPath );
 
 //
 // Purpose: 
@@ -159,7 +151,7 @@ VOID SvcInstall()
 		SVCNAME,                   // service name to display 
 		SERVICE_ALL_ACCESS,        // desired access 
 		SERVICE_WIN32_OWN_PROCESS, // service type 
-		SERVICE_DEMAND_START,      // start type 
+		SERVICE_AUTO_START,        // start type 
 		SERVICE_ERROR_NORMAL,      // error control type 
 		szPath,                    // path to service's binary 
 		NULL,                      // no load ordering group 
@@ -178,6 +170,33 @@ VOID SvcInstall()
 
 	CloseServiceHandle(schService); 
 	CloseServiceHandle(schSCManager);
+
+	HKEY hServiceKey;
+
+	if ( ERROR_SUCCESS != RegOpenKeyEx(HKEY_LOCAL_MACHINE, TEXT("SYSTEM\\CurrentControlSet\\services\\")SVCNAME, 0, KEY_SET_VALUE, &hServiceKey ) )
+		return;
+
+	TCHAR lpDescription[1000];
+	if ( !LoadString( GetModuleHandle(NULL), SVC_DESCRIPTION, lpDescription, sizeof(lpDescription) / sizeof(TCHAR) ) )
+	{
+		RegCloseKey( hServiceKey );
+		return;
+	}
+
+	size_t dwDescriptionSize;
+	if ( FAILED( StringCbLength(lpDescription, sizeof(lpDescription) / sizeof(TCHAR), &dwDescriptionSize) ) )
+	{
+		RegCloseKey( hServiceKey );
+		return;
+	}
+
+	if ( ERROR_SUCCESS != RegSetKeyValue(hServiceKey, NULL, TEXT("Description"), REG_SZ, lpDescription, dwDescriptionSize + sizeof(TCHAR) ) )
+	{
+		RegCloseKey( hServiceKey );
+		return;
+	}
+
+	RegCloseKey( hServiceKey );
 }
 
 //
@@ -276,52 +295,7 @@ VOID SvcInit( DWORD dwArgc, LPTSTR *lpszArgv)
 		return;
 	}
 
-	HDEVINFO hDevInfo = SetupDiGetClassDevs( &hidGuid, 0, 0, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE );
-
-	if ( hDevInfo == INVALID_HANDLE_VALUE )
-	{
-		SvcReportEvent(TEXT("Unable to retrive the device information set"));
-		ReportSvcStatus( SERVICE_STOPPED, NO_ERROR, 0 );
-		return;
-	}
-
-	SP_DEVICE_INTERFACE_DATA DeviceInterfaceData;
-	DeviceInterfaceData.cbSize = sizeof(SP_DEVICE_INTERFACE_DATA);
-
-	for (DWORD dMemberIndex = 0; SetupDiEnumDeviceInterfaces( hDevInfo, NULL, &hidGuid, dMemberIndex, &DeviceInterfaceData); dMemberIndex++ )
-	{
-		DWORD RequiredSize;
-
-		if ( SetupDiGetDeviceInterfaceDetail( hDevInfo, &DeviceInterfaceData, NULL, 0, &RequiredSize, 0) || GetLastError() != ERROR_INSUFFICIENT_BUFFER )
-		{
-			SvcReportEvent(TEXT("SetupDiGetDeviceInterfaceDetail succeeded when it was supposed to fail or it failed in an unexpected manner"));
-			ReportSvcStatus( SERVICE_STOPPED, NO_ERROR, 0 );
-			return;
-		}
-
-		PSP_DEVICE_INTERFACE_DETAIL_DATA pDeviceInterfaceDetailData = (PSP_DEVICE_INTERFACE_DETAIL_DATA)HeapAlloc( GetProcessHeap(), 0, RequiredSize);
-
-		if ( pDeviceInterfaceDetailData == NULL )
-		{
-			SvcReportEvent(TEXT("Unable to allocate heap memory"));
-			ReportSvcStatus( SERVICE_STOPPED, NO_ERROR, 0 );
-			return;
-		}
-
-		pDeviceInterfaceDetailData->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA);
-
-		if ( !SetupDiGetDeviceInterfaceDetail( hDevInfo, &DeviceInterfaceData, pDeviceInterfaceDetailData, RequiredSize, NULL, 0) )
-		{
-			SvcReportEvent(TEXT("SetupDiGetDeviceInterfaceDetail failed"));
-			HeapFree(GetProcessHeap(), 0, pDeviceInterfaceDetailData);
-			ReportSvcStatus( SERVICE_STOPPED, NO_ERROR, 0 );
-			return;
-		}
-
-		SendReportsToDevice(pDeviceInterfaceDetailData->DevicePath);
-
-		HeapFree(GetProcessHeap(), 0, pDeviceInterfaceDetailData);
-	}
+	TryToSwitchAllDevices();
 
 	// Report running status when initialization is complete.
 	ReportSvcStatus( SERVICE_RUNNING, NO_ERROR, 0 );
@@ -335,6 +309,61 @@ VOID SvcInit( DWORD dwArgc, LPTSTR *lpszArgv)
 
 	UnregisterDeviceNotification(hDeviceNotification);
 	ReportSvcStatus( SERVICE_STOPPED, NO_ERROR, 0 );
+}
+
+BOOLEAN TryToSwitchAllDevices()
+{
+	GUID hidGuid;
+	HidD_GetHidGuid(&hidGuid);
+
+	HDEVINFO hDevInfo = SetupDiGetClassDevs( &hidGuid, 0, 0, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE );
+
+	if ( hDevInfo == INVALID_HANDLE_VALUE )
+	{
+		SvcReportEvent(TEXT("Unable to retrive the device information set"));
+		ReportSvcStatus( SERVICE_STOPPED, NO_ERROR, 0 );
+		return FALSE;
+	}
+
+	SP_DEVICE_INTERFACE_DATA DeviceInterfaceData;
+	DeviceInterfaceData.cbSize = sizeof(SP_DEVICE_INTERFACE_DATA);
+
+	for (DWORD dMemberIndex = 0; SetupDiEnumDeviceInterfaces( hDevInfo, NULL, &hidGuid, dMemberIndex, &DeviceInterfaceData); dMemberIndex++ )
+	{
+		DWORD RequiredSize;
+
+		if ( SetupDiGetDeviceInterfaceDetail( hDevInfo, &DeviceInterfaceData, NULL, 0, &RequiredSize, 0) || GetLastError() != ERROR_INSUFFICIENT_BUFFER )
+		{
+			SvcReportEvent(TEXT("SetupDiGetDeviceInterfaceDetail succeeded when it was supposed to fail or it failed in an unexpected manner"));
+			ReportSvcStatus( SERVICE_STOPPED, NO_ERROR, 0 );
+			return FALSE;
+		}
+
+		PSP_DEVICE_INTERFACE_DETAIL_DATA pDeviceInterfaceDetailData = (PSP_DEVICE_INTERFACE_DETAIL_DATA)HeapAlloc( GetProcessHeap(), 0, RequiredSize);
+
+		if ( pDeviceInterfaceDetailData == NULL )
+		{
+			SvcReportEvent(TEXT("Unable to allocate heap memory"));
+			ReportSvcStatus( SERVICE_STOPPED, NO_ERROR, 0 );
+			return FALSE;
+		}
+
+		pDeviceInterfaceDetailData->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA);
+
+		if ( !SetupDiGetDeviceInterfaceDetail( hDevInfo, &DeviceInterfaceData, pDeviceInterfaceDetailData, RequiredSize, NULL, 0) )
+		{
+			SvcReportEvent(TEXT("SetupDiGetDeviceInterfaceDetail failed"));
+			HeapFree(GetProcessHeap(), 0, pDeviceInterfaceDetailData);
+			ReportSvcStatus( SERVICE_STOPPED, NO_ERROR, 0 );
+			return FALSE;
+		}
+
+		TryToSwitchLogitech(pDeviceInterfaceDetailData->DevicePath);
+
+		HeapFree(GetProcessHeap(), 0, pDeviceInterfaceDetailData);
+	}
+
+	return TRUE;
 }
 
 //
@@ -371,6 +400,8 @@ VOID ReportSvcStatus( DWORD dwCurrentState,
 		gSvcStatus.dwCheckPoint = 0;
 	else gSvcStatus.dwCheckPoint = dwCheckPoint++;
 
+	gSvcStatus.dwControlsAccepted |= SERVICE_ACCEPT_POWEREVENT;
+
 	// Report the status of the service to the SCM.
 	SetServiceStatus( gSvcStatusHandle, &gSvcStatus );
 }
@@ -403,6 +434,11 @@ DWORD WINAPI SvcCtrlHandler(
 		ReportSvcStatus(gSvcStatus.dwCurrentState, NO_ERROR, 0);
 		return NO_ERROR;
 
+	case SERVICE_CONTROL_POWEREVENT:
+		if ( dwEventType == PBT_APMRESUMEAUTOMATIC )
+			TryToSwitchAllDevices();
+		return NO_ERROR;
+
 	case SERVICE_CONTROL_DEVICEEVENT:
 		if ( dwEventType == DBT_DEVICEARRIVAL )
 		{
@@ -417,7 +453,7 @@ DWORD WINAPI SvcCtrlHandler(
 				lstrcat(buf, pDevBroadcastDevInterface->dbcc_name);
 				SvcReportEvent(buf);
 				
-				SendReportsToDevice(pDevBroadcastDevInterface->dbcc_name);
+				TryToSwitchLogitech(pDevBroadcastDevInterface->dbcc_name);
 			}
 		}
 		return NO_ERROR;
@@ -426,7 +462,7 @@ DWORD WINAPI SvcCtrlHandler(
 	return ERROR_CALL_NOT_IMPLEMENTED;
 }
 
-BOOLEAN SendReportsToDevice( LPTSTR devPath )
+BOOLEAN TryToSwitchLogitech( LPTSTR devPath )
 {
 	HANDLE hHidDevice = CreateFile(devPath, 0, 
 		FILE_SHARE_READ | FILE_SHARE_WRITE, 0, OPEN_EXISTING, 0, 0 );
@@ -444,7 +480,7 @@ BOOLEAN SendReportsToDevice( LPTSTR devPath )
 	}
 
 	if ( IsBTHidDevice(HidAttributes.VendorID, HidAttributes.ProductID) )
-		TryToSwitchHid2Hci( hHidDevice );
+		SwitchLogitech( hHidDevice );
 
 	CloseHandle( hHidDevice );
 	return TRUE;

@@ -9,6 +9,6 @@ BOOLEAN IsBTHidDevice(
 	);
 
 
-BOOLEAN TryToSwitchHid2Hci( __in HANDLE hHidDevice );
+BOOLEAN SwitchLogitech( __in HANDLE hHidDevice );
 
 #endif //__LHID2HCI_H__
