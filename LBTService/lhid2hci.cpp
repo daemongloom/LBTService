@@ -1,5 +1,7 @@
 #define WIN32_NO_STATUS
 #include <windows.h>
+#include <stdio.h>
+#include <tchar.h>
 extern "C"
 {
 #include <ntstatus.h>
@@ -9,6 +11,9 @@ extern "C"
 }
 #include "lhid2hci.h"
 
+#define CONFIG_KEY TEXT("SOFTWARE\\CSa\\LBTService")
+#define BT_DEVICE_INFO_ALLOC_STEP 10
+
 CHAR Reports[3][7] =
 {
 	{ (CHAR)0x10, (CHAR)0xFF, (CHAR)0x80, (CHAR)0x80, (CHAR)0x01, (CHAR)0x00, (CHAR)0x00 },
@@ -16,18 +21,84 @@ CHAR Reports[3][7] =
 	{ (CHAR)0x10, (CHAR)0xFF, (CHAR)0x81, (CHAR)0x80, (CHAR)0x00, (CHAR)0x00, (CHAR)0x00 }
 };
 
-BOOLEAN IsBTHidDevice(
+PBT_DEVICE_INFO btDeviceInfo = NULL;
+DWORD cbtDeviceInfoSize = 0;
+
+BOOLEAN LoadSupportedBluetoothDevices()
+{
+	HKEY hConfigKey;
+
+	if ( btDeviceInfo != NULL )
+		return FALSE;
+
+	if ( ERROR_SUCCESS != RegOpenKeyEx(HKEY_LOCAL_MACHINE, CONFIG_KEY, 0, KEY_READ, &hConfigKey ) )
+		return FALSE;
+
+	DWORD dwValuesCount;
+	if ( ERROR_SUCCESS != RegQueryInfoKey(hConfigKey, NULL, NULL, NULL, NULL, NULL, NULL, &dwValuesCount, NULL, NULL, NULL, NULL) )
+		return FALSE;
+	
+	cbtDeviceInfoSize = dwValuesCount;
+	btDeviceInfo = (PBT_DEVICE_INFO) HeapAlloc(GetProcessHeap(), 0, dwValuesCount * sizeof(BT_DEVICE_INFO) );
+	if ( btDeviceInfo == NULL )
+		return FALSE;
+	
+	for ( DWORD i = 0; i < dwValuesCount; i++ )
+	{
+		DWORD dwKeyNameSize = sizeof(btDeviceInfo->lptstrBluetoothDeviceName) / sizeof( TCHAR );
+		DWORD dwType;
+		TCHAR lptstrValue[100];
+		DWORD dwValueSize = sizeof(lptstrValue) / sizeof(TCHAR);
+
+		if ( ERROR_SUCCESS != RegEnumValue(hConfigKey, i, btDeviceInfo[i].lptstrBluetoothDeviceName, &dwKeyNameSize, NULL, &dwType, (LPBYTE)lptstrValue, &dwValueSize) &&
+			dwValueSize < sizeof(lptstrValue) / sizeof (TCHAR) )
+		{
+			HeapFree(GetProcessHeap(), 0, btDeviceInfo);
+			btDeviceInfo = NULL;
+			return FALSE;
+		}
+		
+		TCHAR *next_token = NULL;
+		TCHAR *szVendorId = _tcstok_s(lptstrValue, TEXT(" "), &next_token);
+		if ( szVendorId == NULL )
+		{
+			HeapFree(GetProcessHeap(), 0, btDeviceInfo);
+			btDeviceInfo = NULL;
+			return FALSE;
+		}
+
+		btDeviceInfo[i].usVendorId = wcstoul( szVendorId, 0, 16 );
+
+		TCHAR *szProductId = _tcstok_s(NULL, TEXT(" "), &next_token);
+		if ( szProductId == NULL )
+		{
+			HeapFree(GetProcessHeap(), 0, btDeviceInfo);
+			btDeviceInfo = NULL;
+			return FALSE;
+		}
+
+		btDeviceInfo[i].pProductId = wcstoul( szProductId, 0, 16 );
+	}
+
+	RegCloseKey( hConfigKey );
+	return TRUE;
+}
+
+LPTSTR IsBTHidDevice(
 					  __in USHORT pVendorId,
 					  __in USHORT pProductId
 					  )
 {
-	if ( pVendorId == 0x046d && pProductId == 0xc71f )
-		return TRUE;
-	else
-		return FALSE;
+	if ( btDeviceInfo != NULL && cbtDeviceInfoSize != 0 )
+		for (int i = 0; i < cbtDeviceInfoSize; i++)
+			if ( btDeviceInfo[i].pProductId == pProductId && 
+				btDeviceInfo[i].usVendorId == pVendorId )
+				return btDeviceInfo[i].lptstrBluetoothDeviceName;
+	
+	return NULL;
 }
 
-BOOLEAN SwitchLogitech( __in HANDLE hHidDevice )
+BOOLEAN SwitchLogitech( __in LPTSTR lpDongleName, __in HANDLE hHidDevice )
 {
 	PHIDP_PREPARSED_DATA PreparsedData;
 
@@ -49,14 +120,6 @@ BOOLEAN SwitchLogitech( __in HANDLE hHidDevice )
 	}
 
 	if ( HidCaps.OutputReportByteLength != sizeof(Reports[0]) )
-	{
-		HidD_FreePreparsedData(PreparsedData);
-		return FALSE;
-	}
-
-	PCHAR HidReport = (PCHAR)HeapAlloc( GetProcessHeap(), HEAP_ZERO_MEMORY, HidCaps.OutputReportByteLength );
-
-	if ( HidReport == NULL )
 	{
 		HidD_FreePreparsedData(PreparsedData);
 		return FALSE;

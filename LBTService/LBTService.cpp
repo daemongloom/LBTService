@@ -276,6 +276,12 @@ VOID SvcInit( DWORD dwArgc, LPTSTR *lpszArgv)
 		return;
 	}
 
+	if ( !LoadSupportedBluetoothDevices() )
+	{
+		ReportSvcStatus( SERVICE_STOPPED, NO_ERROR, 0 );
+		return;
+	}
+
 	GUID hidGuid;
 	HidD_GetHidGuid(&hidGuid);
 
@@ -479,8 +485,8 @@ BOOLEAN TryToSwitchLogitech( LPTSTR devPath )
 		return FALSE;
 	}
 
-	if ( IsBTHidDevice(HidAttributes.VendorID, HidAttributes.ProductID) )
-		SwitchLogitech( hHidDevice );
+	if ( LPTSTR lptstrDongleName = IsBTHidDevice(HidAttributes.VendorID, HidAttributes.ProductID) )
+		SwitchLogitech( lptstrDongleName, hHidDevice );
 
 	CloseHandle( hHidDevice );
 	return TRUE;
