@@ -10,7 +10,6 @@ VOID WINAPI SvcMain( DWORD, LPTSTR * );
 
 VOID ReportSvcStatus( DWORD, DWORD, DWORD );
 VOID SvcInit( DWORD, LPTSTR * ); 
-VOID SvcReportEvent( LPTSTR );
 BOOLEAN TryToSwitchLogitech( LPTSTR devPath );
 BOOLEAN TryToSwitchAllDevices();
 

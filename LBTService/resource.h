@@ -3,7 +3,6 @@
 // Used by LBTService.rc
 //
 #define SVC_DESCRIPTION                 100
-#define VS_VERSION_INFO                 102
 
 // Next default values for new objects
 // 

@@ -13,15 +13,13 @@ extern "C"
 #include <SetupAPI.h>
 #include "lhid2hci.h"
 #include "LBTService.h"
-#include "LBTServiceMsg.h"
+#include "eventlog.h"
 #include "resource.h"
 
 
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "setupapi.lib")
 #pragma comment(lib, "hid.lib")
-
-#define SVCNAME TEXT("LBTService")
 
 SERVICE_STATUS          gSvcStatus; 
 SERVICE_STATUS_HANDLE   gSvcStatusHandle; 
@@ -66,7 +64,7 @@ void __cdecl _tmain(int argc, TCHAR *argv[])
 
 	if (!StartServiceCtrlDispatcher( DispatchTable )) 
 	{ 
-		SvcReportEvent(TEXT("StartServiceCtrlDispatcher")); 
+		LbtReportFunctionError(TEXT("StartServiceCtrlDispatcher")); 
 	}
 
 	printf("Use \"install\" to install the service\n");
@@ -101,11 +99,20 @@ VOID SvcUninstall()
 		printf("Unable to delete service (%d)\n", GetLastError());
 		return;
 	}
-	else
-		printf("Service uninstalled succesfully\n");
 
 	CloseServiceHandle(schService); 
 	CloseServiceHandle(schSCManager);
+
+	HKEY hApplicationEventLogKey;
+
+	if ( ERROR_SUCCESS != RegOpenKeyEx(HKEY_LOCAL_MACHINE, TEXT("SYSTEM\\CurrentControlSet\\services\\Eventlog\\Application"), 0, KEY_CREATE_SUB_KEY, &hApplicationEventLogKey ) )
+		return;
+
+	if ( ERROR_SUCCESS != RegDeleteKey(hApplicationEventLogKey, SVCNAME ) )
+		return;
+
+	printf("Service uninstalled succesfully\n");
+
 }
 
 //
@@ -166,7 +173,6 @@ VOID SvcInstall()
 		CloseServiceHandle(schSCManager);
 		return;
 	}
-	else printf("Service installed successfully\n"); 
 
 	CloseServiceHandle(schService); 
 	CloseServiceHandle(schSCManager);
@@ -193,10 +199,53 @@ VOID SvcInstall()
 	if ( ERROR_SUCCESS != RegSetKeyValue(hServiceKey, NULL, TEXT("Description"), REG_SZ, lpDescription, dwDescriptionSize + sizeof(TCHAR) ) )
 	{
 		RegCloseKey( hServiceKey );
+		printf("Unable to set the service description"); 
+		return;
+	}
+	
+	RegCloseKey( hServiceKey );
+
+	HKEY hApplicationEventLogKey, hServiceEventLogKey;
+
+	if ( ERROR_SUCCESS != RegOpenKeyEx(HKEY_LOCAL_MACHINE, TEXT("SYSTEM\\CurrentControlSet\\services\\Eventlog\\Application"), 0, KEY_CREATE_SUB_KEY, &hApplicationEventLogKey ) )
+		return;
+
+	if ( ERROR_SUCCESS != RegCreateKeyEx( hApplicationEventLogKey, SVCNAME, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, NULL, &hServiceEventLogKey, NULL) )
+	{
+		RegCloseKey( hApplicationEventLogKey );
+		printf("Unable to create the service event log key"); 
 		return;
 	}
 
-	RegCloseKey( hServiceKey );
+	size_t dwPathSize;
+	if ( FAILED( StringCbLength(szPath, sizeof(szPath) / sizeof(TCHAR), &dwPathSize) ) )
+	{
+		RegCloseKey( hServiceKey );
+		return;
+	}
+
+	if ( ERROR_SUCCESS != RegSetKeyValue(hServiceEventLogKey, NULL, TEXT("EventMessageFile"), REG_SZ, szPath, dwPathSize + sizeof(TCHAR) ) )
+	{
+		RegCloseKey( hServiceEventLogKey );
+		RegCloseKey( hApplicationEventLogKey );
+		printf("Unable to write EventMessageFile registry value"); 
+		return;
+	}
+
+	DWORD dwTypesSupported = EVENTLOG_ERROR_TYPE | EVENTLOG_INFORMATION_TYPE | EVENTLOG_WARNING_TYPE ;
+	if ( ERROR_SUCCESS != RegSetKeyValue(hServiceEventLogKey, NULL, TEXT("TypesSupported"), REG_DWORD, &dwTypesSupported, sizeof( DWORD ) ) )
+	{
+		RegCloseKey( hServiceEventLogKey );
+		RegCloseKey( hApplicationEventLogKey );
+		printf("Unable to write TypeSupported registry value"); 
+		return;
+	}
+
+	RegCloseKey( hServiceEventLogKey );
+	RegCloseKey( hApplicationEventLogKey );
+
+	printf("Service installed successfully\n"); 
+
 }
 
 //
@@ -223,7 +272,7 @@ VOID WINAPI SvcMain( DWORD dwArgc, LPTSTR *lpszArgv )
 
 	if( !gSvcStatusHandle )
 	{ 
-		SvcReportEvent(TEXT("RegisterServiceCtrlHandler")); 
+		LbtReportFunctionError(TEXT("RegisterServiceCtrlHandler")); 
 		return; 
 	} 
 
@@ -326,7 +375,7 @@ BOOLEAN TryToSwitchAllDevices()
 
 	if ( hDevInfo == INVALID_HANDLE_VALUE )
 	{
-		SvcReportEvent(TEXT("Unable to retrive the device information set"));
+		LbtReportFunctionError(TEXT("SetupDiGetClassDevs"));
 		ReportSvcStatus( SERVICE_STOPPED, NO_ERROR, 0 );
 		return FALSE;
 	}
@@ -340,7 +389,7 @@ BOOLEAN TryToSwitchAllDevices()
 
 		if ( SetupDiGetDeviceInterfaceDetail( hDevInfo, &DeviceInterfaceData, NULL, 0, &RequiredSize, 0) || GetLastError() != ERROR_INSUFFICIENT_BUFFER )
 		{
-			SvcReportEvent(TEXT("SetupDiGetDeviceInterfaceDetail succeeded when it was supposed to fail or it failed in an unexpected manner"));
+			LbtReportFunctionError(TEXT("SetupDiGetDeviceInterfaceDetail"));
 			ReportSvcStatus( SERVICE_STOPPED, NO_ERROR, 0 );
 			return FALSE;
 		}
@@ -349,7 +398,7 @@ BOOLEAN TryToSwitchAllDevices()
 
 		if ( pDeviceInterfaceDetailData == NULL )
 		{
-			SvcReportEvent(TEXT("Unable to allocate heap memory"));
+			LbtReportFunctionError(TEXT("HeapAlloc"));
 			ReportSvcStatus( SERVICE_STOPPED, NO_ERROR, 0 );
 			return FALSE;
 		}
@@ -358,7 +407,7 @@ BOOLEAN TryToSwitchAllDevices()
 
 		if ( !SetupDiGetDeviceInterfaceDetail( hDevInfo, &DeviceInterfaceData, pDeviceInterfaceDetailData, RequiredSize, NULL, 0) )
 		{
-			SvcReportEvent(TEXT("SetupDiGetDeviceInterfaceDetail failed"));
+			LbtReportFunctionError(TEXT("SetupDiGetDeviceInterfaceDetail"));
 			HeapFree(GetProcessHeap(), 0, pDeviceInterfaceDetailData);
 			ReportSvcStatus( SERVICE_STOPPED, NO_ERROR, 0 );
 			return FALSE;
@@ -452,13 +501,6 @@ DWORD WINAPI SvcCtrlHandler(
 			if ( pDevBroadcastHdr->dbch_devicetype == DBT_DEVTYP_DEVICEINTERFACE )
 			{
 				PDEV_BROADCAST_DEVICEINTERFACE pDevBroadcastDevInterface = (PDEV_BROADCAST_DEVICEINTERFACE) lpEventData;
-				
-				TCHAR buf[2000];
-				
-				lstrcpy(buf, TEXT("A fost adaugat un device cu numele: "));
-				lstrcat(buf, pDevBroadcastDevInterface->dbcc_name);
-				SvcReportEvent(buf);
-				
 				TryToSwitchLogitech(pDevBroadcastDevInterface->dbcc_name);
 			}
 		}
@@ -490,46 +532,4 @@ BOOLEAN TryToSwitchLogitech( LPTSTR devPath )
 
 	CloseHandle( hHidDevice );
 	return TRUE;
-}
-
-//
-// Purpose: 
-//   Logs messages to the event log
-//
-// Parameters:
-//   szFunction - name of function that failed
-// 
-// Return value:
-//   None
-//
-// Remarks:
-//   The service must have an entry in the Application event log.
-//
-VOID SvcReportEvent(LPTSTR szFunction) 
-{ 
-	HANDLE hEventSource;
-	LPCTSTR lpszStrings[2];
-	TCHAR Buffer[80];
-
-	hEventSource = RegisterEventSource(NULL, SVCNAME);
-
-	if( NULL != hEventSource )
-	{
-		StringCchPrintf(Buffer, 80, TEXT("%s failed with %d"), szFunction, GetLastError());
-
-		lpszStrings[0] = SVCNAME;
-		lpszStrings[1] = Buffer;
-
-		ReportEvent(hEventSource,        // event log handle
-			EVENTLOG_ERROR_TYPE, // event type
-			0,                   // event category
-			SVC_ERROR,           // event identifier
-			NULL,                // no security identifier
-			2,                   // size of lpszStrings array
-			0,                   // no binary data
-			lpszStrings,         // array of strings
-			NULL);               // no binary data
-
-		DeregisterEventSource(hEventSource);
-	}
 }

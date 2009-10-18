@@ -10,6 +10,7 @@ extern "C"
 #include <hidpi.h>
 }
 #include "lhid2hci.h"
+#include "eventlog.h"
 
 #define CONFIG_KEY TEXT("SOFTWARE\\CSa\\LBTService")
 #define BT_DEVICE_INFO_ALLOC_STEP 10
@@ -32,7 +33,10 @@ BOOLEAN LoadSupportedBluetoothDevices()
 		return FALSE;
 
 	if ( ERROR_SUCCESS != RegOpenKeyEx(HKEY_LOCAL_MACHINE, CONFIG_KEY, 0, KEY_READ, &hConfigKey ) )
+	{
+		LbtReportFunctionError( TEXT("Unable to open key \"") CONFIG_KEY TEXT("\"; probably it doesn't exist RegOpenKeyEx") );
 		return FALSE;
+	}
 
 	DWORD dwValuesCount;
 	if ( ERROR_SUCCESS != RegQueryInfoKey(hConfigKey, NULL, NULL, NULL, NULL, NULL, NULL, &dwValuesCount, NULL, NULL, NULL, NULL) )
@@ -53,6 +57,7 @@ BOOLEAN LoadSupportedBluetoothDevices()
 		if ( ERROR_SUCCESS != RegEnumValue(hConfigKey, i, btDeviceInfo[i].lptstrBluetoothDeviceName, &dwKeyNameSize, NULL, &dwType, (LPBYTE)lptstrValue, &dwValueSize) &&
 			dwValueSize < sizeof(lptstrValue) / sizeof (TCHAR) )
 		{
+
 			HeapFree(GetProcessHeap(), 0, btDeviceInfo);
 			btDeviceInfo = NULL;
 			return FALSE;
@@ -67,7 +72,7 @@ BOOLEAN LoadSupportedBluetoothDevices()
 			return FALSE;
 		}
 
-		btDeviceInfo[i].usVendorId = wcstoul( szVendorId, 0, 16 );
+		btDeviceInfo[i].usVendorId = (USHORT)wcstoul( szVendorId, 0, 16 );
 
 		TCHAR *szProductId = _tcstok_s(NULL, TEXT(" "), &next_token);
 		if ( szProductId == NULL )
@@ -77,7 +82,7 @@ BOOLEAN LoadSupportedBluetoothDevices()
 			return FALSE;
 		}
 
-		btDeviceInfo[i].pProductId = wcstoul( szProductId, 0, 16 );
+		btDeviceInfo[i].pProductId = (USHORT)wcstoul( szProductId, 0, 16 );
 	}
 
 	RegCloseKey( hConfigKey );
@@ -90,7 +95,7 @@ LPTSTR IsBTHidDevice(
 					  )
 {
 	if ( btDeviceInfo != NULL && cbtDeviceInfoSize != 0 )
-		for (int i = 0; i < cbtDeviceInfoSize; i++)
+		for (DWORD i = 0; i < cbtDeviceInfoSize; i++)
 			if ( btDeviceInfo[i].pProductId == pProductId && 
 				btDeviceInfo[i].usVendorId == pVendorId )
 				return btDeviceInfo[i].lptstrBluetoothDeviceName;
@@ -103,12 +108,16 @@ BOOLEAN SwitchLogitech( __in LPTSTR lpDongleName, __in HANDLE hHidDevice )
 	PHIDP_PREPARSED_DATA PreparsedData;
 
 	if ( !HidD_GetPreparsedData( hHidDevice, &PreparsedData ) )
+	{
+		LbtReportFunctionError( TEXT("HidD_GetPreparsedData") );
 		return FALSE;
+	}
 
 	HIDP_CAPS       HidCaps;
 
 	if ( !HidP_GetCaps( PreparsedData, &HidCaps ) )
 	{
+		LbtReportFunctionError( TEXT("HidP_GetCaps") );
 		HidD_FreePreparsedData(PreparsedData);
 		return FALSE;
 	}
@@ -131,11 +140,13 @@ BOOLEAN SwitchLogitech( __in LPTSTR lpDongleName, __in HANDLE hHidDevice )
 		RtlCopyMemory( ReportBuffer, Reports[i], sizeof( Reports[0] ) );
 		if (!HidD_SetOutputReport( hHidDevice, ReportBuffer, HidCaps.OutputReportByteLength ) )
 		{
+			LbtReportFunctionError( TEXT("HidD_SetOutputReport") );
 			HidD_FreePreparsedData(PreparsedData);
 			return FALSE;
 		}
 	}
 
 	HidD_FreePreparsedData(PreparsedData);
+	LbtReportDongleSwitch( lpDongleName );
 	return TRUE;
 }
