@@ -28,10 +28,6 @@
 //
 // Define the facility codes
 //
-#define FACILITY_SYSTEM                  0x0
-#define FACILITY_STUBS                   0x3
-#define FACILITY_RUNTIME                 0x2
-#define FACILITY_IO_ERROR_CODE           0x4
 
 
 //
@@ -44,13 +40,22 @@
 
 
 //
-// MessageId: SVC_ERROR
+// MessageId: LBT_ERROR
 //
 // MessageText:
 //
 // An error has occurred (%2).
 //
-#define SVC_ERROR                        ((DWORD)0xC0020001L)
+#define LBT_ERROR                        ((DWORD)0xC0000001L)
+
+//
+// MessageId: LBT_CONVERTED
+//
+// MessageText:
+//
+// %1 successfully converted %2 to HID mode.
+//
+#define LBT_CONVERTED                    ((DWORD)0x40000002L)
 
  // A message file must end with a period on its own line
  // followed by a blank line.
