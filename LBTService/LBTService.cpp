@@ -196,7 +196,7 @@ VOID SvcInstall()
 		return;
 	}
 
-	if ( ERROR_SUCCESS != RegSetKeyValue(hServiceKey, NULL, TEXT("Description"), REG_SZ, lpDescription, dwDescriptionSize + sizeof(TCHAR) ) )
+	if ( ERROR_SUCCESS != RegSetValueEx(hServiceKey, TEXT("Description"), NULL, REG_SZ, (BYTE *)lpDescription, dwDescriptionSize + sizeof(TCHAR) ) )
 	{
 		RegCloseKey( hServiceKey );
 		printf("Unable to set the service description"); 
@@ -224,7 +224,7 @@ VOID SvcInstall()
 		return;
 	}
 
-	if ( ERROR_SUCCESS != RegSetKeyValue(hServiceEventLogKey, NULL, TEXT("EventMessageFile"), REG_SZ, szPath, dwPathSize + sizeof(TCHAR) ) )
+	if ( ERROR_SUCCESS != RegSetValueEx(hServiceEventLogKey, TEXT("EventMessageFile"), NULL, REG_SZ, (BYTE *)szPath, dwPathSize + sizeof(TCHAR) ) )
 	{
 		RegCloseKey( hServiceEventLogKey );
 		RegCloseKey( hApplicationEventLogKey );
@@ -233,7 +233,7 @@ VOID SvcInstall()
 	}
 
 	DWORD dwTypesSupported = EVENTLOG_ERROR_TYPE | EVENTLOG_INFORMATION_TYPE | EVENTLOG_WARNING_TYPE ;
-	if ( ERROR_SUCCESS != RegSetKeyValue(hServiceEventLogKey, NULL, TEXT("TypesSupported"), REG_DWORD, &dwTypesSupported, sizeof( DWORD ) ) )
+	if ( ERROR_SUCCESS != RegSetValueEx(hServiceEventLogKey, TEXT("TypesSupported"), NULL, REG_DWORD, (BYTE *)&dwTypesSupported, sizeof( DWORD ) ) )
 	{
 		RegCloseKey( hServiceEventLogKey );
 		RegCloseKey( hApplicationEventLogKey );
