@@ -12,5 +12,7 @@ VOID ReportSvcStatus( DWORD, DWORD, DWORD );
 VOID SvcInit( DWORD, LPTSTR * ); 
 BOOLEAN TryToSwitchLogitech( LPTSTR devPath );
 BOOLEAN TryToSwitchAllDevices();
+BOOL LBTStopService( SC_HANDLE schSCManager, SC_HANDLE schService );
+
 
 #endif //__LBTSERVICE_H__

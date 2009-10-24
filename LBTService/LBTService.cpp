@@ -90,11 +90,17 @@ VOID SvcUninstall()
 	schService = OpenService( 
 		schSCManager,       // SCM database 
 		SVCNAME,          // name of service 
-		DELETE);            // need delete access 
+		DELETE | SERVICE_STOP | SERVICE_QUERY_STATUS );            // need delete access 
 
-	BOOL bResult = DeleteService( schService );
+	BOOL bResult = LBTStopService(schSCManager, schService);
+	if ( !bResult ) 
+	{
+		printf("Unable to delete service (%d)\n", GetLastError());
+		return;
+	}
 
-	if (FALSE == schSCManager) 
+	bResult = DeleteService( schService );
+	if ( !bResult )  
 	{
 		printf("Unable to delete service (%d)\n", GetLastError());
 		return;
@@ -113,6 +119,102 @@ VOID SvcUninstall()
 
 	printf("Service uninstalled succesfully\n");
 
+}
+
+BOOL LBTStopService( SC_HANDLE schSCManager, SC_HANDLE schService )
+{
+	SERVICE_STATUS_PROCESS ssp;
+	DWORD dwStartTime = GetTickCount();
+	DWORD dwBytesNeeded;
+	DWORD dwTimeout = 30000; // 30-second time-out
+	DWORD dwWaitTime;
+
+	if ( !QueryServiceStatusEx( 
+		schService, 
+		SC_STATUS_PROCESS_INFO,
+		(LPBYTE)&ssp, 
+		sizeof(SERVICE_STATUS_PROCESS),
+		&dwBytesNeeded ) )
+	{
+		printf("QueryServiceStatusEx failed (%d)\n", GetLastError()); 
+		return FALSE;
+	}
+
+	if ( ssp.dwCurrentState == SERVICE_STOPPED )
+		return TRUE;
+
+	while ( ssp.dwCurrentState == SERVICE_STOP_PENDING ) 
+	{
+		// Do not wait longer than the wait hint. A good interval is 
+		// one-tenth of the wait hint but not less than 1 second  
+		// and not more than 10 seconds. 
+
+		dwWaitTime = ssp.dwWaitHint / 10;
+
+		if( dwWaitTime < 1000 )
+			dwWaitTime = 1000;
+		else if ( dwWaitTime > 10000 )
+			dwWaitTime = 10000;
+
+		Sleep( dwWaitTime );
+
+		if ( !QueryServiceStatusEx( 
+			schService, 
+			SC_STATUS_PROCESS_INFO,
+			(LPBYTE)&ssp, 
+			sizeof(SERVICE_STATUS_PROCESS),
+			&dwBytesNeeded ) )
+		{
+			printf("QueryServiceStatusEx failed (%d)\n", GetLastError()); 
+			return FALSE;
+		}
+
+		if ( ssp.dwCurrentState == SERVICE_STOPPED )
+		{
+			return TRUE;
+		}
+
+		if ( GetTickCount() - dwStartTime > dwTimeout )
+		{
+			printf("Service stop timed out.\n");
+			return FALSE;
+		}
+	}
+
+    if ( !ControlService( 
+            schService, 
+            SERVICE_CONTROL_STOP, 
+            (LPSERVICE_STATUS) &ssp ) )
+    {
+        printf( "ControlService failed (%d)\n", GetLastError() );
+		return FALSE;
+    }
+
+	while ( ssp.dwCurrentState != SERVICE_STOPPED ) 
+	{
+		Sleep( ssp.dwWaitHint );
+		if ( !QueryServiceStatusEx( 
+			schService, 
+			SC_STATUS_PROCESS_INFO,
+			(LPBYTE)&ssp, 
+			sizeof(SERVICE_STATUS_PROCESS),
+			&dwBytesNeeded ) )
+		{
+			printf( "QueryServiceStatusEx failed (%d)\n", GetLastError() );
+			return FALSE;
+		}
+
+		if ( ssp.dwCurrentState == SERVICE_STOPPED )
+			break;
+
+		if ( GetTickCount() - dwStartTime > dwTimeout )
+		{
+			printf( "Wait timed out\n" );
+			return FALSE;
+		}
+	}
+
+	return TRUE;
 }
 
 //
@@ -172,6 +274,13 @@ VOID SvcInstall()
 		printf("CreateService failed (%d)\n", GetLastError()); 
 		CloseServiceHandle(schSCManager);
 		return;
+	}
+
+	if ( !StartService(schService, 0, NULL) )
+	{
+		printf("Unable to start service (%d)\n", GetLastError()); 
+		CloseServiceHandle(schService); 
+		CloseServiceHandle(schSCManager);
 	}
 
 	CloseServiceHandle(schService); 
@@ -243,6 +352,8 @@ VOID SvcInstall()
 
 	RegCloseKey( hServiceEventLogKey );
 	RegCloseKey( hApplicationEventLogKey );
+
+
 
 	printf("Service installed successfully\n"); 
 

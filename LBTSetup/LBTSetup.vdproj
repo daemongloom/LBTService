@@ -43,6 +43,14 @@
         "PrivateKeyFile" = "8:"
         "TimeStampServer" = "8:"
         "InstallerBootstrapper" = "3:2"
+            "BootstrapperCfg:{63ACBE69-63AA-4F98-B2B6-99F9E24495F2}"
+            {
+            "Enabled" = "11:TRUE"
+            "PromptEnabled" = "11:TRUE"
+            "PrerequisitesLocation" = "2:1"
+            "Url" = "8:"
+            "ComponentsUrl" = "8:"
+            }
         }
         "Release"
         {
@@ -220,14 +228,14 @@
         {
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:LBTService"
-        "ProductCode" = "8:{4312C115-6175-4C40-8B88-AB59778C35CE}"
-        "PackageCode" = "8:{A54E6522-D202-46E4-8AB8-FBD66C2E407D}"
+        "ProductCode" = "8:{63EC398F-0304-4EF8-8ED6-29CF4141AEC5}"
+        "PackageCode" = "8:{7AAA416A-6B49-4B4F-8245-093F60809CE2}"
         "UpgradeCode" = "8:{2950920C-CDCA-4A84-AF7F-AB800C593DFC}"
         "RestartWWWService" = "11:FALSE"
         "RemovePreviousVersions" = "11:TRUE"
         "DetectNewerInstalledVersion" = "11:TRUE"
         "InstallAllUsers" = "11:TRUE"
-        "ProductVersion" = "8:0.1"
+        "ProductVersion" = "8:0.1.1"
         "Manufacturer" = "8:CSa"
         "ARPHELPTELEPHONE" = "8:"
         "ARPHELPLINK" = "8:"
@@ -282,9 +290,41 @@
                                         }
                                         "Values"
                                         {
+                                            "{ADCFDA98-8FDD-45E4-90BC-E3D20B029870}:_0445131265584BABA0F92B68C52A7E60"
+                                            {
+                                            "Name" = "8:diNovo Edge"
+                                            "Condition" = "8:"
+                                            "Transitive" = "11:FALSE"
+                                            "ValueTypes" = "3:1"
+                                            "Value" = "8:046d c714"
+                                            }
+                                            "{ADCFDA98-8FDD-45E4-90BC-E3D20B029870}:_3BD391D561D7430C9AC1902F90002135"
+                                            {
+                                            "Name" = "8:MX900 Bluetooth Cordless Optical Mouse2"
+                                            "Condition" = "8:"
+                                            "Transitive" = "11:FALSE"
+                                            "ValueTypes" = "3:1"
+                                            "Value" = "8:046d c705"
+                                            }
+                                            "{ADCFDA98-8FDD-45E4-90BC-E3D20B029870}:_3C85BD266F9D4B5C9D62B06F113832AE"
+                                            {
+                                            "Name" = "8:MX900 Bluetooth Cordless Optical Mouse1"
+                                            "Condition" = "8:"
+                                            "Transitive" = "11:FALSE"
+                                            "ValueTypes" = "3:1"
+                                            "Value" = "8:046d c703"
+                                            }
+                                            "{ADCFDA98-8FDD-45E4-90BC-E3D20B029870}:_A91CEEA6CC2E474F970648951613517F"
+                                            {
+                                            "Name" = "8:diNovo Media Desktop Laser"
+                                            "Condition" = "8:"
+                                            "Transitive" = "11:FALSE"
+                                            "ValueTypes" = "3:1"
+                                            "Value" = "8:046D C704"
+                                            }
                                             "{ADCFDA98-8FDD-45E4-90BC-E3D20B029870}:_D63681000F0F49C5B36E41A115B1677E"
                                             {
-                                            "Name" = "8:Logitech MX 5000"
+                                            "Name" = "8:Cordless Desktop MX 5000 Laser"
                                             "Condition" = "8:"
                                             "Transitive" = "11:FALSE"
                                             "ValueTypes" = "3:1"
@@ -292,7 +332,7 @@
                                             }
                                             "{ADCFDA98-8FDD-45E4-90BC-E3D20B029870}:_F881FF614F19497D887CD9562CEC8918"
                                             {
-                                            "Name" = "8:Logitech diNovo Mini"
+                                            "Name" = "8:diNovo Mini"
                                             "Condition" = "8:"
                                             "Transitive" = "11:FALSE"
                                             "ValueTypes" = "3:1"
@@ -316,34 +356,6 @@
             {
                 "Keys"
                 {
-                    "{60EA8692-D2D5-43EB-80DC-7906BF13D6EF}:_ECBBB88A23A9495EABF3CD7A4D5B6B3F"
-                    {
-                    "Name" = "8:Software"
-                    "Condition" = "8:"
-                    "AlwaysCreate" = "11:FALSE"
-                    "DeleteAtUninstall" = "11:FALSE"
-                    "Transitive" = "11:FALSE"
-                        "Keys"
-                        {
-                            "{60EA8692-D2D5-43EB-80DC-7906BF13D6EF}:_2E9AACDA277B443AA67333A8B5DB150A"
-                            {
-                            "Name" = "8:[Manufacturer]"
-                            "Condition" = "8:"
-                            "AlwaysCreate" = "11:FALSE"
-                            "DeleteAtUninstall" = "11:FALSE"
-                            "Transitive" = "11:FALSE"
-                                "Keys"
-                                {
-                                }
-                                "Values"
-                                {
-                                }
-                            }
-                        }
-                        "Values"
-                        {
-                        }
-                    }
                 }
             }
             "HKCR"
