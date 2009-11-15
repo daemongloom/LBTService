@@ -33,10 +33,10 @@ VOID LbtReportFunctionError(LPTSTR szFunction)
 	}
 }
 
-VOID LbtReportDongleSwitch( LPTSTR szDongleName )
+VOID LbtReportDongleSwitch( LPTSTR szDongleName, BOOL toHID )
 {
 	HANDLE hEventSource;
-	LPCTSTR lpszStrings[2];
+	LPCTSTR lpszStrings[3];
 
 	hEventSource = RegisterEventSource(NULL, SVCNAME);
 
@@ -44,8 +44,9 @@ VOID LbtReportDongleSwitch( LPTSTR szDongleName )
 	{
 		lpszStrings[0] = SVCNAME;
 		lpszStrings[1] = szDongleName;
+		lpszStrings[2] = toHID ? TEXT("HCI") : TEXT("HID");
 
-		ReportEvent(hEventSource, EVENTLOG_INFORMATION_TYPE, 0, LBT_CONVERTED, NULL, 2, 0, lpszStrings, NULL);
+		ReportEvent(hEventSource, EVENTLOG_INFORMATION_TYPE, 0, LBT_CONVERTED, NULL, 3, 0, lpszStrings, NULL);
 
 		DeregisterEventSource(hEventSource);
 	}

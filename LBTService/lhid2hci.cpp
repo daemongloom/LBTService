@@ -15,11 +15,17 @@ extern "C"
 #define CONFIG_KEY TEXT("SOFTWARE\\CSa\\LBTService")
 #define BT_DEVICE_INFO_ALLOC_STEP 10
 
-CHAR Reports[3][7] =
+CHAR ToHCIReports[3][7] =
 {
 	{ (CHAR)0x10, (CHAR)0xFF, (CHAR)0x80, (CHAR)0x80, (CHAR)0x01, (CHAR)0x00, (CHAR)0x00 },
 	{ (CHAR)0x10, (CHAR)0xFF, (CHAR)0x80, (CHAR)0x00, (CHAR)0x00, (CHAR)0x30, (CHAR)0x00 },
 	{ (CHAR)0x10, (CHAR)0xFF, (CHAR)0x81, (CHAR)0x80, (CHAR)0x00, (CHAR)0x00, (CHAR)0x00 }
+};
+
+CHAR ToHIDReports[2][7] =
+{
+	{ (CHAR)0x10, (CHAR)0xFF, (CHAR)0x81, (CHAR)0x80, (CHAR)0x00, (CHAR)0x00, (CHAR)0x00 },
+	{ (CHAR)0x10, (CHAR)0xFF, (CHAR)0x80, (CHAR)0x80, (CHAR)0x03, (CHAR)0x00, (CHAR)0x00 },
 };
 
 PBT_DEVICE_INFO btDeviceInfo = NULL;
@@ -103,7 +109,7 @@ LPTSTR IsBTHidDevice(
 	return NULL;
 }
 
-BOOLEAN SwitchLogitech( __in LPTSTR lpDongleName, __in HANDLE hHidDevice )
+BOOLEAN SwitchLogitech( __in LPTSTR lpDongleName, __in HANDLE hHidDevice, __in BOOL toHID )
 {
 	PHIDP_PREPARSED_DATA PreparsedData;
 
@@ -128,16 +134,19 @@ BOOLEAN SwitchLogitech( __in LPTSTR lpDongleName, __in HANDLE hHidDevice )
 		return FALSE;
 	}
 
-	if ( HidCaps.OutputReportByteLength != sizeof(Reports[0]) )
+	if ( HidCaps.OutputReportByteLength != sizeof(ToHCIReports[0]) )
 	{
 		HidD_FreePreparsedData(PreparsedData);
 		return FALSE;
 	}
 
-	for (int i = 0; i < sizeof(Reports) / sizeof(Reports[0]); i++ )
+	DWORD noReports = toHID ? sizeof(ToHCIReports) / sizeof(ToHCIReports[0]) :
+		sizeof(ToHIDReports) / sizeof(ToHIDReports[0]);
+
+	for (DWORD i = 0; i < noReports; i++ )
 	{
-		CHAR ReportBuffer[sizeof(Reports[0])];
-		RtlCopyMemory( ReportBuffer, Reports[i], sizeof( Reports[0] ) );
+		CHAR ReportBuffer[sizeof(ToHCIReports[0])];
+		RtlCopyMemory( ReportBuffer, toHID ? ToHCIReports[i] : ToHIDReports[i], sizeof( ToHCIReports[0] ) );
 		if (!HidD_SetOutputReport( hHidDevice, ReportBuffer, HidCaps.OutputReportByteLength ) )
 		{
 			LbtReportFunctionError( TEXT("HidD_SetOutputReport") );
@@ -147,6 +156,6 @@ BOOLEAN SwitchLogitech( __in LPTSTR lpDongleName, __in HANDLE hHidDevice )
 	}
 
 	HidD_FreePreparsedData(PreparsedData);
-	LbtReportDongleSwitch( lpDongleName );
+	LbtReportDongleSwitch( lpDongleName, toHID );
 	return TRUE;
 }

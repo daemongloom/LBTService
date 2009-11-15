@@ -9,7 +9,7 @@ LPTSTR IsBTHidDevice(
 	);
 
 
-BOOLEAN SwitchLogitech( __in LPTSTR lpDongleName, __in HANDLE hHidDevice );
+BOOLEAN SwitchLogitech( __in LPTSTR lpDongleName, __in HANDLE hHidDevice, __in BOOL toHID );
 
 typedef struct _BT_DEVICE_INFO
 {

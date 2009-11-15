@@ -23,7 +23,7 @@ Severity=Informational
 Facility=Application
 SymbolicName=LBT_CONVERTED
 Language=English
-%1 successfully converted %2 to HID mode.
+%1 successfully converted %2 to %3 mode.
 .
 
 

@@ -6,7 +6,7 @@
 #define SVCNAME TEXT("LBTService")
 
 VOID LbtReportFunctionError(LPTSTR szFunction);
-VOID LbtReportDongleSwitch( LPTSTR szDongleName );
+VOID LbtReportDongleSwitch( LPTSTR szDongleName, BOOL toHID );
 
 
 #endif //__EVENTLOG_H__

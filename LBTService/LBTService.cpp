@@ -461,7 +461,7 @@ VOID SvcInit( DWORD dwArgc, LPTSTR *lpszArgv)
 		return;
 	}
 
-	TryToSwitchAllDevices();
+	TryToSwitchAllDevices( TRUE );
 
 	// Report running status when initialization is complete.
 	ReportSvcStatus( SERVICE_RUNNING, NO_ERROR, 0 );
@@ -477,7 +477,7 @@ VOID SvcInit( DWORD dwArgc, LPTSTR *lpszArgv)
 	ReportSvcStatus( SERVICE_STOPPED, NO_ERROR, 0 );
 }
 
-BOOLEAN TryToSwitchAllDevices()
+BOOLEAN TryToSwitchAllDevices( BOOL toHID )
 {
 	GUID hidGuid;
 	HidD_GetHidGuid(&hidGuid);
@@ -524,7 +524,7 @@ BOOLEAN TryToSwitchAllDevices()
 			return FALSE;
 		}
 
-		TryToSwitchLogitech(pDeviceInterfaceDetailData->DevicePath);
+		TryToSwitchLogitech( pDeviceInterfaceDetailData->DevicePath, toHID );
 
 		HeapFree(GetProcessHeap(), 0, pDeviceInterfaceDetailData);
 	}
@@ -592,6 +592,7 @@ DWORD WINAPI SvcCtrlHandler(
 	switch(dwControl) 
 	{
 	case SERVICE_CONTROL_STOP:
+		TryToSwitchAllDevices( FALSE );
 		ReportSvcStatus(SERVICE_STOP_PENDING, NO_ERROR, 0);
 		SetEvent(ghSvcStopEvent);
 		return NO_ERROR;
@@ -602,7 +603,7 @@ DWORD WINAPI SvcCtrlHandler(
 
 	case SERVICE_CONTROL_POWEREVENT:
 		if ( dwEventType == PBT_APMRESUMEAUTOMATIC )
-			TryToSwitchAllDevices();
+			TryToSwitchAllDevices( TRUE );
 		return NO_ERROR;
 
 	case SERVICE_CONTROL_DEVICEEVENT:
@@ -612,7 +613,7 @@ DWORD WINAPI SvcCtrlHandler(
 			if ( pDevBroadcastHdr->dbch_devicetype == DBT_DEVTYP_DEVICEINTERFACE )
 			{
 				PDEV_BROADCAST_DEVICEINTERFACE pDevBroadcastDevInterface = (PDEV_BROADCAST_DEVICEINTERFACE) lpEventData;
-				TryToSwitchLogitech(pDevBroadcastDevInterface->dbcc_name);
+				TryToSwitchLogitech(pDevBroadcastDevInterface->dbcc_name, TRUE);
 			}
 		}
 		return NO_ERROR;
@@ -621,7 +622,7 @@ DWORD WINAPI SvcCtrlHandler(
 	return ERROR_CALL_NOT_IMPLEMENTED;
 }
 
-BOOLEAN TryToSwitchLogitech( LPTSTR devPath )
+BOOLEAN TryToSwitchLogitech( LPTSTR devPath, BOOL toHID )
 {
 	HANDLE hHidDevice = CreateFile(devPath, 0, 
 		FILE_SHARE_READ | FILE_SHARE_WRITE, 0, OPEN_EXISTING, 0, 0 );
@@ -639,7 +640,7 @@ BOOLEAN TryToSwitchLogitech( LPTSTR devPath )
 	}
 
 	if ( LPTSTR lptstrDongleName = IsBTHidDevice(HidAttributes.VendorID, HidAttributes.ProductID) )
-		SwitchLogitech( lptstrDongleName, hHidDevice );
+		SwitchLogitech( lptstrDongleName, hHidDevice, toHID );
 
 	CloseHandle( hHidDevice );
 	return TRUE;
