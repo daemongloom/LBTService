@@ -524,7 +524,7 @@ BOOLEAN TryToSwitchAllDevices( BOOL toHID )
 			return FALSE;
 		}
 
-		TryToSwitchLogitech( pDeviceInterfaceDetailData->DevicePath, toHID );
+		TryToSwitch(pDeviceInterfaceDetailData->DevicePath, toHID);
 
 		HeapFree(GetProcessHeap(), 0, pDeviceInterfaceDetailData);
 	}
@@ -613,7 +613,7 @@ DWORD WINAPI SvcCtrlHandler(
 			if ( pDevBroadcastHdr->dbch_devicetype == DBT_DEVTYP_DEVICEINTERFACE )
 			{
 				PDEV_BROADCAST_DEVICEINTERFACE pDevBroadcastDevInterface = (PDEV_BROADCAST_DEVICEINTERFACE) lpEventData;
-				TryToSwitchLogitech(pDevBroadcastDevInterface->dbcc_name, TRUE);
+				TryToSwitch(pDevBroadcastDevInterface->dbcc_name, TRUE);
 			}
 		}
 		return NO_ERROR;
@@ -622,7 +622,7 @@ DWORD WINAPI SvcCtrlHandler(
 	return ERROR_CALL_NOT_IMPLEMENTED;
 }
 
-BOOLEAN TryToSwitchLogitech( LPTSTR devPath, BOOL toHID )
+BOOLEAN TryToSwitch( LPTSTR devPath, BOOL toHID )
 {
 	HANDLE hHidDevice = CreateFile(devPath, 0, 
 		FILE_SHARE_READ | FILE_SHARE_WRITE, 0, OPEN_EXISTING, 0, 0 );
@@ -639,8 +639,9 @@ BOOLEAN TryToSwitchLogitech( LPTSTR devPath, BOOL toHID )
 		return FALSE;
 	}
 
-	if ( LPTSTR lptstrDongleName = IsBTHidDevice(HidAttributes.VendorID, HidAttributes.ProductID) )
-		SwitchLogitech( lptstrDongleName, hHidDevice, toHID );
+	ConversionFunction conversionFunction;
+	if (LPTSTR lptstrDongleName = IsBTHidDevice(HidAttributes.VendorID, HidAttributes.ProductID, &conversionFunction))
+		(*conversionFunction)(lptstrDongleName, hHidDevice, toHID);
 
 	CloseHandle( hHidDevice );
 	return TRUE;

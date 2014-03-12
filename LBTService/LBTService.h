@@ -10,7 +10,7 @@ VOID WINAPI SvcMain( DWORD, LPTSTR * );
 
 VOID ReportSvcStatus( DWORD, DWORD, DWORD );
 VOID SvcInit( DWORD, LPTSTR * ); 
-BOOLEAN TryToSwitchLogitech( LPTSTR devPath, BOOL toHID );
+BOOLEAN TryToSwitch(LPTSTR devPath, BOOL toHID);
 BOOLEAN TryToSwitchAllDevices( BOOL toHID );
 BOOL LBTStopService( SC_HANDLE schSCManager, SC_HANDLE schService );
 

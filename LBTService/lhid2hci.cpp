@@ -2,6 +2,8 @@
 #include <windows.h>
 #include <stdio.h>
 #include <tchar.h>
+#include <strsafe.h>
+
 extern "C"
 {
 #include <ntstatus.h>
@@ -21,6 +23,10 @@ CHAR ToHCIReports[3][7] =
 	{ (CHAR)0x10, (CHAR)0xFF, (CHAR)0x80, (CHAR)0x00, (CHAR)0x00, (CHAR)0x30, (CHAR)0x00 },
 	{ (CHAR)0x10, (CHAR)0xFF, (CHAR)0x81, (CHAR)0x80, (CHAR)0x00, (CHAR)0x00, (CHAR)0x00 }
 };
+
+CHAR ToHCICSRReports[11] =
+	{ (CHAR)0x06, (CHAR)0x00, (CHAR)0xFF, (CHAR)0x09, (CHAR)0x01, (CHAR)0x95, (CHAR)0x01, (CHAR)0x75, (CHAR)0x08, (CHAR)0xB1, (CHAR)0x02 };
+
 
 CHAR ToHIDReports[2][7] =
 {
@@ -89,6 +95,14 @@ BOOLEAN LoadSupportedBluetoothDevices()
 		}
 
 		btDeviceInfo[i].pProductId = (USHORT)wcstoul( szProductId, 0, 16 );
+
+		TCHAR *szProtocol = _tcstok_s(NULL, TEXT(" "), &next_token);
+		if (szProtocol == NULL)
+		{
+			szProtocol = TEXT("logitech");
+		}
+
+		StringCchCopy(btDeviceInfo[i].lptstrProtocol, 256, szProtocol);
 	}
 
 	RegCloseKey( hConfigKey );
@@ -97,16 +111,69 @@ BOOLEAN LoadSupportedBluetoothDevices()
 
 LPTSTR IsBTHidDevice(
 					  __in USHORT pVendorId,
-					  __in USHORT pProductId
+					  __in USHORT pProductId,
+					  __out ConversionFunction *conversionFunction
 					  )
 {
 	if ( btDeviceInfo != NULL && cbtDeviceInfoSize != 0 )
 		for (DWORD i = 0; i < cbtDeviceInfoSize; i++)
-			if ( btDeviceInfo[i].pProductId == pProductId && 
-				btDeviceInfo[i].usVendorId == pVendorId )
-				return btDeviceInfo[i].lptstrBluetoothDeviceName;
+		if (btDeviceInfo[i].pProductId == pProductId &&
+			btDeviceInfo[i].usVendorId == pVendorId) 
+		{
+			if (!lstrcmpi(btDeviceInfo[i].lptstrProtocol, TEXT("csr")) == 0)
+				*conversionFunction = &SwitchCSR;
+			else
+				*conversionFunction = &SwitchLogitech;
+
+			return btDeviceInfo[i].lptstrBluetoothDeviceName;
+		}
 	
 	return NULL;
+}
+
+BOOLEAN SwitchCSR(__in LPTSTR lpDongleName, __in HANDLE hHidDevice, __in BOOL toHID)
+{
+	PHIDP_PREPARSED_DATA PreparsedData;
+
+	if (!HidD_GetPreparsedData(hHidDevice, &PreparsedData))
+	{
+		LbtReportFunctionError(TEXT("HidD_GetPreparsedData"));
+		return FALSE;
+	}
+
+	HIDP_CAPS       HidCaps;
+
+	if (!HidP_GetCaps(PreparsedData, &HidCaps))
+	{
+		LbtReportFunctionError(TEXT("HidP_GetCaps"));
+		HidD_FreePreparsedData(PreparsedData);
+		return FALSE;
+	}
+
+	if (HidCaps.UsagePage != 0xFF00 || HidCaps.Usage != 0x0001)
+	{
+//		HidD_FreePreparsedData(PreparsedData);
+//		return FALSE;
+	}
+
+	if (HidCaps.FeatureReportByteLength != sizeof(ToHCICSRReports))
+	{
+//		HidD_FreePreparsedData(PreparsedData);
+//		return FALSE;
+	}
+
+	CHAR ReportBuffer[sizeof(ToHCICSRReports)];
+	RtlCopyMemory(ReportBuffer, ToHCICSRReports, sizeof(ToHCICSRReports));
+	if (!HidD_SetFeature(hHidDevice, ReportBuffer, HidCaps.FeatureReportByteLength))
+	{
+		LbtReportFunctionError(TEXT("HidD_SetOutputReport"));
+		HidD_FreePreparsedData(PreparsedData);
+		return FALSE;
+	}
+
+	HidD_FreePreparsedData(PreparsedData);
+	LbtReportDongleSwitch(lpDongleName, toHID);
+	return TRUE;
 }
 
 BOOLEAN SwitchLogitech( __in LPTSTR lpDongleName, __in HANDLE hHidDevice, __in BOOL toHID )

@@ -53,7 +53,7 @@
 //
 // MessageText:
 //
-// %1 successfully converted %2 to HID mode.
+// %1 successfully converted %2 to %3 mode.
 //
 #define LBT_CONVERTED                    ((DWORD)0x40000002L)
 
